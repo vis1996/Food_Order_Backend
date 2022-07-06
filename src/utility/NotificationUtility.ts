@@ -1,5 +1,7 @@
 // Email
 
+import { ACCOUNT_SID, AUTH_TOKEN } from "../config";
+
 // Notification
 
 // OTP
@@ -11,8 +13,8 @@ export const GenerateOtp = () => {
 };
 
 export const onRequestOTP = async (otp: number, toPhoneNumber: string) => {
-  const accountSid = "";
-  const authToken = "";
+  const accountSid = ACCOUNT_SID;
+  const authToken = AUTH_TOKEN;
 
   const client = require("twilio")(accountSid, authToken);
   const response = await client.messages.create({
