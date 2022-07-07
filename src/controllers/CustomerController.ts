@@ -58,6 +58,7 @@ export const CustomerSignUp = async (
     otp_expiry: expiry,
     lat: 0,
     lng: 0,
+    cart: [],
     orders: [],
   });
   if (result) {
@@ -221,7 +222,83 @@ export const EditCusomerProfile = async (
   }
   return res.status(400).json({ message: "Error with update Profile" });
 };
+/**--------------- Cart Section-------------------------**/
+export const AddToCart = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const customer = req.user;
+  if (customer) {
+    const profile = await Customer.findById(customer._id).populate('cart.food');
+    let cartItems = Array();
+    const { _id, unit } = <OrderInputs>req.body;
+    const food = await Food.findById(_id);
+    if (food) {
+      if (profile != null) {
+        // check for cart items
+        cartItems = profile.cart;
+        if (cartItems.length > 0) {
+          // check and update unit
+          let existFoodItem = cartItems.filter((item) => item.food._id.toString() == _id);
+          if (existFoodItem.length > 0) {
+            const index = cartItems.indexOf(existFoodItem[0]);
+            if (unit > 0) {
+               cartItems[index] = { food, unit };
+            } else {
+              cartItems.splice(index, 1);
+            }
+          } else {
+            cartItems.push({ food, unit });
+          }
+        } else {
+          // add new item to cart
+          cartItems.push({ food, unit });
+        }
+        if (cartItems) {
+          profile.cart = cartItems as any;
+          const cartresult = await profile.save();
+          return res.status(200).json(cartresult.cart);
+        }
+      }
+    }
+  }
+    return res.status(400).json({ message: "Unable to create cart!" });
+};
 
+export const GetCart = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const customer = req.user;
+  if (customer) {
+    const profile = await Customer.findById(customer._id).populate('cart.food');
+    if (profile) {
+      return res.status(200).json(profile.cart)
+    }
+  }
+  return res.status(400).json({ message: "Cart is empty!"});
+};
+
+export const DeleteCart = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const customer = req.user;
+  if (customer) {
+    const profile = await Customer.findById(customer._id).populate('cart.food');
+    if (profile != null) {
+      profile.cart = [] as any;
+      const cartResult = await profile.save()
+      return res.status(200).json(cartResult);
+    }
+  }
+  return res.status(400).json({ message: "Cart is already empty!"});
+};
+
+/**--------------- Order Section-------------------------**/
 export const CreateOrder = async (
   req: Request,
   res: Response,
@@ -232,7 +309,7 @@ export const CreateOrder = async (
 
   if (customer) {
     // create an order ID
-    const orderId = `${(Math.floor(Math.random() * 89999) + 1000)}`;
+    const orderId = `${Math.floor(Math.random() * 89999) + 1000}`;
     const profile = await Customer.findById(customer._id);
 
     const cart = <[OrderInputs]>req.body; // [{ id: xx, unit: yy }]
@@ -240,6 +317,7 @@ export const CreateOrder = async (
     let cartItems = Array();
 
     let netAmount = 0.0;
+    let vandorId;
     // calculate order amount
     const foods = await Food.find()
       .where("_id")
@@ -248,27 +326,33 @@ export const CreateOrder = async (
     foods.map((food) => {
       cart.map(({ _id, unit }) => {
         if (food._id == _id) {
+          vandorId = food.vandorId;
           netAmount += food.price * unit;
           cartItems.push({ food, unit });
         }
       });
     });
-    console.log(orderId);
     // create order with Item description
     if (cartItems) {
       // create order
       const currentOrder = await Order.create({
         orderId: orderId,
+        vandorId:vandorId,
         items: cartItems,
         totalAmount: netAmount,
         orderDate: new Date(),
         paidThrough: "COD",
         paymentResponse: "",
         orderStatus: "Waiting",
+        remarks: "",
+        deliveryId: "",
+        appliedOffer: false,
+        offerId: null,
+        readyTime: 45,
       });
-      console.log(currentOrder);
 
       if (currentOrder) {
+        profile.cart = [] as any;
         profile.orders.push(currentOrder);
         await profile.save();
         return res.status(200).json(currentOrder);

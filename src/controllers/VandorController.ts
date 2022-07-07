@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { EditVandorInputs, VandorLoginInputs } from "../dto";
 import { CreateFoodInputs } from "../dto";
-import { Food } from "../models";
+import { Food, Order } from "../models";
 import { GenerateSignature, validatePassword } from "../utility";
 import { FindVandor } from "./AdminController";
 
@@ -112,10 +112,8 @@ export const AddFood = async (
 ) => {
   const user = req.user;
   if (user) {
-    const { name, description, category, foodType, readyTime, price } = <
-      CreateFoodInputs
-    >req.body;
-    const vandor = await FindVandor(user._id);
+    const { name, description, category, foodType, readyTime, price } = <CreateFoodInputs>req.body;
+    const vandor =  await FindVandor(user._id);
     if (vandor !== null) {
       const files = req.files as [Express.Multer.File];
       const images = files.map((file: Express.Multer.File) => file.filename);
@@ -151,4 +149,56 @@ export const GetFoods = async (
     }
   }
   return res.json({ message: "Food information Not found" });
+};
+
+export const GetCurrentOrders = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const user = req.user;
+  if (user) {
+    const orders = await Order.find({ vandorId: user._id }).populate("items.food");
+    if (orders != null) {
+      return res.status(200).json(orders);
+    }
+  }
+  return res.json({ message: "Order not found!" });
+};
+
+export const GetOrderDetails = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const orderId = req.params.id;
+  if (orderId) {
+    const order = await Order.findById(orderId).populate("items.food");
+    if (order != null) {
+      return res.status(200).json(order);
+    }
+  }
+  return res.json({ message: "Order not found!" });
+};
+
+export const ProcessOrder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const orderId = req.params.id;
+  const { status, remarks, time } = req.body; // ACCEPT // REJECT // UDER-PROCESS // READY
+  if (orderId) {
+    const order = await Order.findById(orderId).populate('items.food');
+    order.orderStatus = status;
+    order.remarks = remarks;
+    if (time){
+      order.readyTime = time;
+    }
+    const orderResult = await order.save();
+    if (orderResult) {
+      return res.status(200).json(orderResult);
+    }
+  }
+  return res.json({ message: "Unable to process Order!" });
 };
